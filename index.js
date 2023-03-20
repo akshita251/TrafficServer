@@ -3,6 +3,9 @@ const app = express()
 const cors = require('cors');
 require('dotenv').config();
 
+const fs = require("fs");
+const csv = require("csv-parser");
+
 points = [
     [18.99406, 73.11475],
     [19.0007, 73.12988],
@@ -35,7 +38,7 @@ app.get('/', (req, res) => {
 })
 
 app.get('/data_points', (req, res) => {
-    res.send({nodeLocations: points})
+    res.send({ nodeLocations: points })
 })
 
 app.post('/optimal_path', (req, res) => {
@@ -45,14 +48,98 @@ app.post('/optimal_path', (req, res) => {
     endpointId = data.endPointId
     modelName = data.modelName
 
-    console.log(data)
+    console.log(data.endPointId)
 
-    estimatedTime = Math.floor(Math.random() * 30)
-    endPoint = startPointId.toString();
-    startPoint = endpointId.toString();
-    path = [startPoint, Math.floor(Math.random() * 20).toString(), Math.floor(Math.random() * 20).toString(), Math.floor(Math.random() * 20).toString(), endPoint]
-    output = {path, estimatedTime, endPoint, startPoint}
-    res.send(output)
+    // console.log(data)
+
+    const dijkstra = (graph, startNode, endNode) => {
+        // Initialize the distance and visited arrays
+        const distances = new Array(graph.length).fill(Infinity);
+        const visited = new Array(graph.length).fill(false);
+
+        // Set the distance to the start node as 0
+        distances[startNode] = 0;
+
+        // Find the shortest path to all nodes
+        for (let i = 0; i < graph.length - 1; i++) {
+            // Find the node with the smallest distance
+            let smallestDistance = Infinity;
+            let smallestIndex = -1;
+            for (let j = 0; j < graph.length; j++) {
+                if (!visited[j] && distances[j] < smallestDistance) {
+                    smallestDistance = distances[j];
+                    smallestIndex = j;
+                }
+            }
+
+            // Mark the node as visited
+            visited[smallestIndex] = true;
+
+            // Update the distances of the neighboring nodes
+            for (let j = 0; j < graph.length; j++) {
+                if (graph[smallestIndex][j] !== 0 && !visited[j]) {
+                    const distance = graph[smallestIndex][j];
+                    const totalDistance = distances[smallestIndex] + distance;
+                    if (totalDistance < distances[j]) {
+                        distances[j] = totalDistance;
+                    }
+                }
+            }
+        }
+
+        // Construct the path array by tracing back from the end node to the start node
+        const path = [];
+        let currentNode = endNode;
+        while (currentNode !== startNode) {
+            path.unshift(currentNode);
+            for (let i = 0; i < graph.length; i++) {
+                if (graph[i][currentNode] !== 0 && distances[i] + graph[i][currentNode] === distances[currentNode]) {
+                    currentNode = i;
+                    break;
+                }
+            }
+        }
+        path.unshift(startNode);
+
+        // Return the distance and path arrays
+        return { distance: distances[endNode], path };
+    };
+
+    // Define the name of the CSV file
+    const filename = "graph.csv";
+
+    // Create an empty array to store the graph data
+    let graph = [];
+
+    // Read the CSV file using the csv-parser package
+    fs.createReadStream(filename)
+        .pipe(csv())
+        .on("data", (row) => {
+            // Parse the row data and add it to the graph array
+            let rowValues = Object.values(row);
+            let rowIntValues = rowValues.map((value) => parseInt(value));
+            graph.push(rowIntValues);
+        })
+        .on("end", () => {
+            // Log the adjacency matrix representation of the graph
+            console.log("Graph:");
+            // console.log(graph);
+
+            const { distance, path } = dijkstra(graph, startPointId, data.endPointId);
+            console.log(`Shortest distance: ${distance}`);
+            console.log(`Shortest path: ${path.join(' -> ')}`);
+
+            console.log(path)
+
+            const stringPath = path.map((integer) => integer.toString());
+            estimatedTime = Math.floor(Math.random() * 30)
+            endPoint = startPointId.toString();
+            startPoint = endpointId.toString();
+            output = { stringPath, estimatedTime, endPoint, startPoint }
+            res.send(output)
+        });
+
+  
 });
 
 const PORT = 8081
